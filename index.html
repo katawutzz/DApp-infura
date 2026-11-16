@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bank DApp (Infura)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f6fb; --card: #ffffff; --text: #1b2333; --muted: #5d6880; --line: #e1e6f0;
+    --accent: #2f5bea; --accent-ink: #ffffff; --ok: #138a4b; --err: #c2312f; --warn: #a86500;
+    --chip: #eef2ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1420; --card: #171e2e; --text: #e8ecf5; --muted: #98a3bb; --line: #2a3448;
+      --accent: #6a8cff; --accent-ink: #0b1020; --ok: #4fd18b; --err: #ff7b77; --warn: #f0b44c; --chip: #222c44; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: "Sarabun", system-ui, sans-serif; font-size: 16px; line-height: 1.5; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 32px 16px 48px; }
+  header h1 { margin: 0 0 4px; font-size: 28px; }
+  header p { margin: 0; color: var(--muted); }
+  .student { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 16px; padding: 12px 16px; background: var(--chip); border-radius: 10px; }
+  .student b { font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-top: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 18px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+  input, select { flex: 1; min-width: 0; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+  input.mono { font-family: "JetBrains Mono", monospace; font-size: 13px; }
+  button { padding: 10px 16px; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; font-size: 15px; }
+  .kv > span:nth-child(odd) { color: var(--muted); }
+  .mono { font-family: "JetBrains Mono", monospace; font-size: 13px; word-break: break-all; }
+  .big { font-size: 32px; font-weight: 700; margin: 4px 0 12px; }
+  .warn { color: var(--warn); }
+  .status { margin-top: 16px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); font-size: 15px; display: none; }
+  .status.show { display: block; }
+  .status.ok { color: var(--ok); border-color: var(--ok); }
+  .status.err { color: var(--err); border-color: var(--err); }
+  .status.wait { color: var(--warn); border-color: var(--warn); }
+  ul.log { list-style: none; margin: 0; padding: 0; }
+  ul.log li { padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  ul.log li:first-child { border-top: 0; }
+  ul.log a { color: var(--accent); }
+  .in { color: var(--ok); font-weight: 600; }
+  .out { color: var(--err); font-weight: 600; }
+  .empty { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Bank DApp</h1>
+    <p>ฝาก ถอน และตรวจสอบยอดเงินผ่าน Smart Contract — อ่านข้อมูลผ่าน Infura, ลงนามธุรกรรมด้วย MetaMask</p>
+    <div class="student">
+      <div>รหัสนักศึกษา: <b id="studentId"></b></div>
+      <div>ชื่อ-สกุล: <b id="studentName"></b></div>
+    </div>
+  </header>
+
+  <section class="card">
+    <h2>1. เชื่อมต่อ MetaMask</h2>
+    <div class="row">
+      <button id="btnConnect">เชื่อมต่อ MetaMask</button>
+      <button id="btnSwitch" class="ghost" style="display:none">สลับ MetaMask ไปเครือข่ายที่เลือก</button>
+    </div>
+    <div class="kv" style="margin-top:14px">
+      <span>บัญชี</span><span id="account" class="mono">ยังไม่เชื่อมต่อ</span>
+      <span>เครือข่าย MetaMask</span><span id="walletNet">-</span>
+      <span>ETH ในกระเป๋า</span><span id="walletBal">-</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>2. เชื่อมต่อ Smart Contract (ผ่าน Infura)</h2>
+    <label for="netSel">เครือข่าย</label>
+    <select id="netSel" style="margin-bottom:12px"></select>
+    <label for="contractAddr">Contract Address</label>
+    <div class="row">
+      <input id="contractAddr" class="mono" placeholder="0x...">
+      <button id="btnContract" class="ghost">เชื่อมต่อ Contract</button>
+    </div>
+    <div class="kv" style="margin-top:14px">
+      <span>Infura RPC</span><span id="rpcState">-</span>
+      <span>บล็อกล่าสุด</span><span id="blockNo">-</span>
+      <span>สถานะ Contract</span><span id="contractState">ยังไม่เชื่อมต่อ</span>
+      <span>ETH ใน Contract</span><span id="contractBal">-</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>3. ยอดเงินในธนาคาร (checkBlance)</h2>
+    <div class="big" id="bankBal">- ETH</div>
+    <button id="btnCheck">ตรวจสอบยอดเงิน</button>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>4. ฝากเงิน (Deposit)</h2>
+      <label for="depAmt">จำนวน (ETH)</label>
+      <div class="row">
+        <input id="depAmt" type="number" min="0" step="any" placeholder="0.01">
+        <button id="btnDeposit">ฝาก</button>
+      </div>
+    </section>
+    <section class="card">
+      <h2>5. ถอนเงิน (Withdraw)</h2>
+      <label for="wdAmt">จำนวน (ETH)</label>
+      <div class="row">
+        <input id="wdAmt" type="number" min="0" step="any" placeholder="0.01">
+        <button id="btnWithdraw">ถอน</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="status" class="status"></div>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px">
+      <h2 style="margin:0">ประวัติธุรกรรม (จาก Event บน blockchain)</h2>
+      <button id="btnHistory" class="ghost">โหลดประวัติ</button>
+    </div>
+    <ul class="log" id="log"><li class="empty">เชื่อมต่อ MetaMask แล้วกด "โหลดประวัติ"</li></ul>
+  </section>
+</div>
+
+<script>
+  // ===== แก้ข้อมูลตรงนี้ =====
+  const STUDENT_ID = "66002022";
+  const STUDENT_NAME = "คฑาวุธ เมืองพรหม";
+  const INFURA_API_KEY = "11f96ae4defc43b3b89eca6862521da3";
+  const NETWORKS = {
+    560048: {
+      name: "Hoodi Testnet",
+      rpc: `https://hoodi.infura.io/v3/${INFURA_API_KEY}`,
+      contract: "0x595D3F3f26565A9914910B340E85Cd5b5D04bB71",
+      explorer: "https://hoodi.etherscan.io",
+      addParams: { chainName: "Hoodi Testnet", nativeCurrency: { name: "Hoodi ETH", symbol: "ETH", decimals: 18 },
+                   rpcUrls: [`https://hoodi.infura.io/v3/${INFURA_API_KEY}`], blockExplorerUrls: ["https://hoodi.etherscan.io"] }
+    },
+    11155111: {
+      name: "Sepolia Testnet",
+      rpc: `https://sepolia.infura.io/v3/${INFURA_API_KEY}`,
+      contract: "", // ถ้า deploy บน Sepolia ให้ใส่ address ที่นี่
+      explorer: "https://sepolia.etherscan.io",
+      addParams: null
+    }
+  };
+  const DEFAULT_CHAIN_ID = 560048;
+  // ==========================
+
+  const ABI = [
+    "function deposit() payable",
+    "function withdraw(uint256 amount)",
+    "function checkBlance() view returns (uint256 balance)",
+    "event Deposit(address indexed owner, uint256 amount)",
+    "event Withdraw(address indexed owner, uint256 amount)"
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  $("studentId").textContent = STUDENT_ID;
+  $("studentName").textContent = STUDENT_NAME;
+
+  let chainId = DEFAULT_CHAIN_ID;  // เครือข่ายที่เลือก (อ่านข้อมูลผ่าน Infura)
+  let rpc;                          // ethers.JsonRpcProvider → Infura
+  let contract;                     // contract สำหรับอ่านข้อมูล (ผ่าน Infura)
+  let account;                      // บัญชี MetaMask
+  let walletChainId;                // เครือข่ายที่ MetaMask เลือกอยู่
+
+  // ---------- helpers ----------
+  function showStatus(msg, kind) { const el = $("status"); el.textContent = msg; el.className = "status show " + kind; }
+  function errMsg(e) {
+    if (e?.code === 4001 || e?.code === "ACTION_REJECTED") return "ผู้ใช้ยกเลิกธุรกรรมใน MetaMask";
+    return e?.reason || e?.data?.message || e?.error?.data?.message || e?.error?.message ||
+      e?.info?.error?.data?.message || e?.info?.error?.message || e?.shortMessage || e?.message || String(e);
+  }
+  const net = () => NETWORKS[chainId];
+  const fmt = (wei) => `${ethers.formatEther(wei)} ETH`;
+  const txLink = (h) => `<a class="mono" href="${net().explorer}/tx/${h}" target="_blank" rel="noopener">${h}</a>`;
+
+  function savedAddr(id) { try { return localStorage.getItem("bank:" + id) || ""; } catch { return ""; } }
+  function saveAddr(id, v) { try { localStorage.setItem("bank:" + id, v); } catch {} }
+
+  // ---------- network / Infura ----------
+  for (const [id, n] of Object.entries(NETWORKS)) {
+    const o = document.createElement("option"); o.value = id; o.textContent = `${n.name} (chainId ${id})`;
+    $("netSel").appendChild(o);
+  }
+
+  async function selectNetwork(id) {
+    chainId = Number(id);
+    $("netSel").value = String(chainId);
+    rpc = new ethers.JsonRpcProvider(net().rpc, chainId, { staticNetwork: true });
+    rpc.pollingInterval = 3000;
+    contract = null;
+    $("contractAddr").value = net().contract || savedAddr(chainId);
+    $("contractState").textContent = "ยังไม่เชื่อมต่อ";
+    $("contractBal").textContent = "-";
+    $("bankBal").textContent = "- ETH";
+    try {
+      const bn = await rpc.getBlockNumber();
+      $("rpcState").textContent = "เชื่อมต่อ Infura แล้ว";
+      $("blockNo").textContent = bn.toLocaleString();
+    } catch (e) {
+      $("rpcState").innerHTML = `<span class="warn">ติดต่อ Infura ไม่ได้: ${errMsg(e)}</span>`;
+    }
+    updateSwitchBtn();
+    if ($("contractAddr").value) await connectContract(true);
+  }
+
+  async function connectContract(silent) {
+    const addr = $("contractAddr").value.trim();
+    if (!ethers.isAddress(addr)) { if (!silent) showStatus("Contract address ไม่ถูกต้อง", "err"); return false; }
+    try {
+      const code = await rpc.getCode(addr);
+      if (code === "0x") {
+        contract = null;
+        $("contractState").innerHTML = `<span class="warn">ไม่พบ contract ที่ address นี้บน ${net().name}</span>`;
+        if (!silent) showStatus(`ไม่พบ contract บน ${net().name}`, "err");
+        return false;
+      }
+      contract = new ethers.Contract(addr, ABI, rpc);
+      saveAddr(chainId, addr);
+      $("contractState").textContent = "เชื่อมต่อแล้ว";
+      if (!silent) showStatus("เชื่อมต่อ Smart Contract สำเร็จ", "ok");
+      await refreshAll();
+      return true;
+    } catch (e) { showStatus("เชื่อมต่อ contract ไม่สำเร็จ: " + errMsg(e), "err"); return false; }
+  }
+
+  // ---------- MetaMask ----------
+  function updateSwitchBtn() {
+    $("btnSwitch").style.display = (account && walletChainId !== chainId) ? "" : "none";
+    if (!account) return;
+    const name = NETWORKS[walletChainId]?.name || `chainId ${walletChainId}`;
+    $("walletNet").innerHTML = walletChainId === chainId ? name
+      : `<span class="warn">${name} — ไม่ตรงกับเครือข่ายที่เลือก</span>`;
+  }
+
+  async function connectWallet() {
+    if (!window.ethereum) { showStatus("ไม่พบ MetaMask กรุณาติดตั้ง MetaMask ก่อน", "err"); return false; }
+    try {
+      const accs = await window.ethereum.request({ method: "eth_requestAccounts" });
+      account = ethers.getAddress(accs[0]);
+      walletChainId = parseInt(await window.ethereum.request({ method: "eth_chainId" }), 16);
+      $("account").textContent = account;
+      $("btnConnect").textContent = "เชื่อมต่อแล้ว";
+      if (NETWORKS[walletChainId] && walletChainId !== chainId) await selectNetwork(walletChainId);
+      updateSwitchBtn();
+      showStatus("เชื่อมต่อ MetaMask สำเร็จ", "ok");
+      await refreshAll();
+      return true;
+    } catch (e) { showStatus("เชื่อมต่อไม่สำเร็จ: " + errMsg(e), "err"); return false; }
+  }
+
+  async function switchWallet() {
+    const hex = ethers.toQuantity(chainId);
+    try {
+      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
+    } catch (e) {
+      if (e?.code === 4902 && net().addParams) {
+        await window.ethereum.request({ method: "wallet_addEthereumChain", params: [{ chainId: hex, ...net().addParams }] });
+      } else throw e;
+    }
+    walletChainId = chainId;
+    updateSwitchBtn();
+  }
+
+  // ---------- read (Infura) ----------
+  async function refreshAll() {
+    const jobs = [];
+    if (account) jobs.push(rpc.getBalance(account).then(b => $("walletBal").textContent = fmt(b)));
+    if (contract) {
+      jobs.push(rpc.getBalance(contract.target).then(b => $("contractBal").textContent = fmt(b)));
+      if (account) jobs.push(contract.checkBlance({ from: account }).then(b => $("bankBal").textContent = fmt(b)));
+    }
+    jobs.push(rpc.getBlockNumber().then(bn => $("blockNo").textContent = bn.toLocaleString()));
+    await Promise.all(jobs);
+  }
+
+  async function checkBalance() {
+    if (!account && !(await connectWallet())) return;
+    if (!contract && !(await connectContract())) return;
+    try { await refreshAll(); showStatus("อัปเดตยอดเงินแล้ว", "ok"); }
+    catch (e) { showStatus("ตรวจสอบยอดไม่สำเร็จ: " + errMsg(e), "err"); }
+  }
+
+  async function loadHistory() {
+    if (!account && !(await connectWallet())) return;
+    if (!contract && !(await connectContract())) return;
+    const log = $("log");
+    log.innerHTML = '<li class="empty">กำลังโหลด...</li>';
+    try {
+      const latest = await rpc.getBlockNumber();
+      const from = Math.max(0, latest - 50000);
+      const [deps, wds] = await Promise.all([
+        contract.queryFilter(contract.filters.Deposit(account), from, latest),
+        contract.queryFilter(contract.filters.Withdraw(account), from, latest)
+      ]);
+      const items = [...deps.map(e => ({ e, t: "ฝาก", c: "in" })), ...wds.map(e => ({ e, t: "ถอน", c: "out" }))]
+        .sort((a, b) => b.e.blockNumber - a.e.blockNumber || b.e.index - a.e.index);
+      log.innerHTML = items.length ? "" : '<li class="empty">ยังไม่มีธุรกรรมของบัญชีนี้</li>';
+      for (const { e, t, c } of items) {
+        const li = document.createElement("li");
+        li.innerHTML = `<span class="${c}">${t}</span> ${fmt(e.args.amount)} — บล็อก ${e.blockNumber.toLocaleString()}<div>${txLink(e.transactionHash)}</div>`;
+        log.appendChild(li);
+      }
+    } catch (e) { log.innerHTML = `<li class="empty">โหลดประวัติไม่สำเร็จ: ${errMsg(e)}</li>`; }
+  }
+
+  // ---------- write (MetaMask) ----------
+  async function sendTx(kind, method, args, valueWei, amountText) {
+    if (!account && !(await connectWallet())) return;
+    if (!contract && !(await connectContract())) return;
+    const btns = document.querySelectorAll("button");
+    btns.forEach(b => b.disabled = true);
+    try {
+      if (walletChainId !== chainId) { showStatus(`กำลังสลับ MetaMask ไป ${net().name}...`, "wait"); await switchWallet(); }
+      showStatus(`กรุณายืนยันการ${kind}ใน MetaMask...`, "wait");
+      const tx = { from: account, to: contract.target, data: contract.interface.encodeFunctionData(method, args) };
+      if (valueWei) tx.value = ethers.toQuantity(valueWei);
+      const hash = await window.ethereum.request({ method: "eth_sendTransaction", params: [tx] });
+      showStatus(`ส่งธุรกรรมแล้ว รอยืนยันบนบล็อก... (${hash.slice(0, 12)}…)`, "wait");
+      const receipt = await rpc.waitForTransaction(hash, 1, 5 * 60 * 1000);   // รอผ่าน Infura
+      if (!receipt) throw new Error("รอนานเกินไป ลองกด 'ตรวจสอบยอดเงิน' ภายหลัง");
+      if (receipt.status !== 1) throw new Error("ธุรกรรมถูก revert บน blockchain");
+      $("status").innerHTML = `${kind} ${amountText} ETH สำเร็จ<div>${txLink(hash)}</div>`;
+      $("status").className = "status show ok";
+      $("depAmt").value = ""; $("wdAmt").value = "";
+      await refreshAll();
+      await loadHistory();
+    } catch (e) {
+      showStatus(`${kind}ไม่สำเร็จ: ` + errMsg(e), "err");
+    } finally {
+      btns.forEach(b => b.disabled = false);
+    }
+  }
+
+  function parseAmount(id) {
+    const v = $(id).value.trim();
+    if (!v || Number(v) <= 0) throw new Error("กรุณาใส่จำนวนที่มากกว่า 0");
+    return ethers.parseEther(v);
+  }
+
+  // ---------- events ----------
+  $("btnConnect").onclick = connectWallet;
+  $("btnSwitch").onclick = () => switchWallet().catch(e => showStatus("สลับเครือข่ายไม่สำเร็จ: " + errMsg(e), "err"));
+  $("netSel").onchange = (e) => selectNetwork(e.target.value);
+  $("btnContract").onclick = () => connectContract(false);
+  $("btnCheck").onclick = checkBalance;
+  $("btnHistory").onclick = loadHistory;
+  $("btnDeposit").onclick = () => {
+    let wei; try { wei = parseAmount("depAmt"); } catch (e) { showStatus(errMsg(e), "err"); return; }
+    sendTx("ฝากเงิน", "deposit", [], wei, $("depAmt").value.trim());
+  };
+  $("btnWithdraw").onclick = () => {
+    let wei; try { wei = parseAmount("wdAmt"); } catch (e) { showStatus(errMsg(e), "err"); return; }
+    sendTx("ถอนเงิน", "withdraw", [wei], null, $("wdAmt").value.trim());
+  };
+
+  if (window.ethereum?.on) {
+    window.ethereum.on("accountsChanged", (accs) => {
+      if (!accs.length) { location.reload(); return; }
+      account = ethers.getAddress(accs[0]);
+      $("account").textContent = account;
+      refreshAll().catch(() => {});
+      $("log").innerHTML = '<li class="empty">เปลี่ยนบัญชีแล้ว กด "โหลดประวัติ"</li>';
+    });
+    window.ethereum.on("chainChanged", (hex) => {
+      walletChainId = parseInt(hex, 16);
+      if (NETWORKS[walletChainId] && walletChainId !== chainId) selectNetwork(walletChainId);
+      else updateSwitchBtn();
+    });
+  }
+
+  selectNetwork(DEFAULT_CHAIN_ID);
+</script>
+</body>
+</html>
